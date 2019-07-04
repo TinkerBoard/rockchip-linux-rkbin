@@ -10,8 +10,10 @@
 BASEDIR="$(dirname $(realpath $0))"
 
 DEVICE=
-CHIP=
-IMAGES="./rockdev"
+SDBOOTIMG="$BASEDIR/../../rockdev/sdboot.img"
+CHIP=rk3399pro
+IMAGES="$BASEDIR/../../rockdev"
+ROOTFS_IMG="$BASEDIR/../../rockdev/rootfs.img"
 
 BOOT_MERGER="$BASEDIR/../tools/boot_merger"
 MKIMAGE="$BASEDIR/../tools/mkimage"
@@ -71,50 +73,65 @@ function pack_idbloader
 	echo "$(realpath idbloader.bin)"
 }
 
+function createIMG
+{
+	local rootfs_size_blk
+	local rootfs_size_mb
+	local last_offset_mb
+
+	for i in ${!LABELS[@]}; do
+		echo label ${LABELS[$i]} offset ${OFFSETS[$i]} size ${SIZES[$i]}
+		if [ ${SIZES[$i]} = "-" ]; then
+			rootfs_size_blk=$(fdisk -l ${ROOTFS_IMG} | egrep -o "[[:digit:]]+ sectors" | cut -f1 -d' ')
+			SIZES[$i]=$rootfs_size_blk						# update rootfs partition size
+			rootfs_size_mb=$(expr $(($rootfs_size_blk)) \* 512 \/ 1024 \/ 1024)	# blk to MB ( 1blk=512byte )
+			last_offset_mb=$(expr $((${OFFSETS[$i]})) \* 512 \/ 1024 \/ 1024)	# blk to MB ( 1blk=512byte )
+		fi
+	done
+	GPT_IMAGE_SIZE=$(expr $last_offset_mb + $rootfs_size_mb + 2)
+	dd if=/dev/zero of=${SDBOOTIMG} bs=1M count=0 seek=$GPT_IMAGE_SIZE
+	parted -s ${SDBOOTIMG} mklabel gpt
+}
+
 function createGPT
 {
 	echo "Creating GPT..."
-	local DEVICE=$1
 	local ROOTFS=
 
-	umount ${DEVICE}* 2>/dev/null || true
-	parted -s $DEVICE mklabel gpt
 	for i in ${!LABELS[@]}; do
 		local offset=${OFFSETS[$i]}
 		local label=${LABELS[$i]}
 		local size=${SIZES[$i]}
 		echo "Create partition:$label at $offset with size $size"
-		local end=
-		if [ ${SIZES[$i]} = "-" ]; then
-			end=$(fdisk -l $DEVICE | egrep -o "[[:digit:]]+ sectors" | cut -f1 -d' ')
-			end=$(($end - 64)) #the last 33 sectors are for gpt table and header
-		else
-			end=$(($size + $offset))
-		fi
+		local end=$(($size + $offset))
+		echo label $label end $end
 		end=$((end - 1)) # [start,end], end is included
-		parted -s $DEVICE mkpart $label $((${offset}))s $((${end}))s
+		parted -s ${SDBOOTIMG} mkpart $label $((${offset}))s $((${end}))s
 
 		expr match "$label" "root" > /dev/null 2>&1 && ROOTFS=$(($i + 1))
 	done
 
 	partprobe
-	sgdisk --partition-guid=${ROOTFS}:614e0000-0000-4b53-8000-1d28000054a9 $DEVICE
+	sgdisk --partition-guid=${ROOTFS}:614e0000-0000-4b53-8000-1d28000054a9 ${SDBOOTIMG}
 }
 
 function downloadImages
 {
 	echo "Downloading images..."
-	local DEVICE=$1
+	local DEVICE=${SDBOOTIMG}
 
 	dd if=$IMAGES/idbloader.bin of=$DEVICE seek=64 conv=nocreat
 	dd if=$IMAGES/parameter.txt of=$DEVICE seek=$((0x2000)) conv=nocreat
-
+	sleep 1
 	for i in ${!LABELS[@]}; do
 		local label=${LABELS[$i]}
 		local index=$(($i + 1))
-		echo "Copy $label image to ${DEVICE}${index}"
+		echo "Copy $label image to ${DEVICE} offset $((${OFFSETS[$i]}))"
+		if [ $label = "boot" ]; then
+			label=boot_sd
+		fi
 		if [ -f $IMAGES/${label}.img ]; then
-			dd if=$IMAGES/${label}.img of=${DEVICE}${index} bs=1M conv=nocreat
+			dd if=$IMAGES/${label}.img of=${DEVICE} seek=$((${OFFSETS[$i]})) conv=nocreat
 		else
 			echo "$label image not found, skipped"
 		fi
@@ -157,27 +174,29 @@ while getopts 'd:c:i:h' OPT; do
 	esac
 done
 
-if [ ! -d "$IMAGES" -o -z "$CHIP" -o ! -b "$DEVICE" ]; then
-	show_usage
-
-	echo -e "Invalid images dir : $IMAGES, or\n" \
-		"Invalid chip type : $CHIP, or\n" \
-		"Invalid sdcard device: $DEVICE \n"
-	exit 1
-fi
+#if [ ! -d "$IMAGES" -o -z "$CHIP" -o ! -b "$DEVICE" ]; then
+#	show_usage
+#
+#	echo -e "Invalid images dir : $IMAGES, or\n" \
+#		"Invalid chip type : $CHIP, or\n" \
+#		"Invalid sdcard device: $DEVICE \n"
+#	exit 1
+#fi
 
 # DEVICE must be a removable device, check before completely destory it
-REMOVABLE=$(cat /sys/block/$(echo $DEVICE | cut -d'/' -f3)/removable)
-if [ 0 -eq $REMOVABLE ]; then
-	echo "Be careful, you're try to destory your disk: $DEVICE"
-	exit
-fi
+#REMOVABLE=$(cat /sys/block/$(echo $DEVICE | cut -d'/' -f3)/removable)
+#if [ 0 -eq $REMOVABLE ]; then
+#	echo "Be careful, you're try to destory your disk: $DEVICE"
+#	exit
+#fi
 
 parse_parameter $IMAGES/parameter.txt
 
 pack_idbloader "$IMAGES/Mini[Ll]oader[Aa]ll.bin" $CHIP
 
-createGPT $DEVICE
+createIMG
+
+createGPT
 
 downloadImages $DEVICE
 
