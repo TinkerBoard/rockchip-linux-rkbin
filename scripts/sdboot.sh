@@ -127,9 +127,6 @@ function downloadImages
 		local label=${LABELS[$i]}
 		local index=$(($i + 1))
 		echo "Copy $label image to ${DEVICE} offset $((${OFFSETS[$i]}))"
-		if [ $label = "boot" ]; then
-			label=boot_sd
-		fi
 		if [ -f $IMAGES/${label}.img ]; then
 			dd if=$IMAGES/${label}.img of=${DEVICE} seek=$((${OFFSETS[$i]})) conv=nocreat
 		else
