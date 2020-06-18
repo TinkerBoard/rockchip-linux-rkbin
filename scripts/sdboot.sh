@@ -17,6 +17,7 @@ ROOTFS_IMG="$BASEDIR/../../rockdev/rootfs.img"
 
 BOOT_MERGER="$BASEDIR/../tools/boot_merger"
 MKIMAGE="$BASEDIR/../tools/mkimage"
+TYPE="all"
 
 #Array of parts with elem in format:
 #   fmt1: "size@offset@label"
@@ -78,6 +79,9 @@ function createIMG
 	local rootfs_size_blk
 	local rootfs_size_mb
 	local last_offset_mb
+	local trust_size_mb
+	local trust_offset_mb
+	local type=$1
 
 	for i in ${!LABELS[@]}; do
 		echo label ${LABELS[$i]} offset ${OFFSETS[$i]} size ${SIZES[$i]}
@@ -87,8 +91,19 @@ function createIMG
 			rootfs_size_mb=$(expr $(($rootfs_size_blk)) \* 512 \/ 1024 \/ 1024)	# blk to MB ( 1blk=512byte )
 			last_offset_mb=$(expr $((${OFFSETS[$i]})) \* 512 \/ 1024 \/ 1024)	# blk to MB ( 1blk=512byte )
 		fi
+
+		if [ ${LABELS[$i]} = "trust" ]; then
+			trust_size_mb=$(expr $((${SIZES[$i]})) \* 512 \/ 1024 \/ 1024)		# blk to MB ( 1blk=512byte )
+			trust_offset_mb=$(expr $((${OFFSETS[$i]})) \* 512 \/ 1024 \/ 1024)	# blk to MB ( 1blk=512byte )
+		fi
 	done
-	GPT_IMAGE_SIZE=$(expr $last_offset_mb + $rootfs_size_mb + 2)
+
+	if [ $type = "all" ]; then
+		GPT_IMAGE_SIZE=$(expr $last_offset_mb + $rootfs_size_mb + 2)
+	elif [ $type = "uboot" ]; then
+		GPT_IMAGE_SIZE=$(expr $trust_offset_mb + $trust_size_mb + 2)
+	fi
+
 	dd if=/dev/zero of=${SDBOOTIMG} bs=1M count=0 seek=$GPT_IMAGE_SIZE
 	parted -s ${SDBOOTIMG} mklabel gpt
 }
@@ -96,7 +111,7 @@ function createIMG
 function createGPT
 {
 	echo "Creating GPT..."
-	local ROOTFS=
+	local type=$1
 
 	for i in ${!LABELS[@]}; do
 		local offset=${OFFSETS[$i]}
@@ -107,18 +122,19 @@ function createGPT
 		echo label $label end $end
 		end=$((end - 1)) # [start,end], end is included
 		parted -s ${SDBOOTIMG} mkpart $label $((${offset}))s $((${end}))s
-
-		expr match "$label" "root" > /dev/null 2>&1 && ROOTFS=$(($i + 1))
+		if [ $type = "uboot" -a $label = "trust" ]; then
+			break
+		fi
 	done
 
 	partprobe
-	sgdisk --partition-guid=${ROOTFS}:614e0000-0000-4b53-8000-1d28000054a9 ${SDBOOTIMG}
 }
 
 function downloadImages
 {
 	echo "Downloading images..."
 	local DEVICE=${SDBOOTIMG}
+	local type=$1
 
 	dd if=$IMAGES/idbloader.bin of=$DEVICE seek=64 conv=nocreat
 	dd if=$IMAGES/parameter.txt of=$DEVICE seek=$((0x2000)) conv=nocreat
@@ -131,6 +147,10 @@ function downloadImages
 			dd if=$IMAGES/${label}.img of=${DEVICE} seek=$((${OFFSETS[$i]})) conv=nocreat
 		else
 			echo "$label image not found, skipped"
+		fi
+
+		if [ $type = "uboot" -a $label = "trust" ]; then
+			break
 		fi
 	done
 
@@ -145,6 +165,7 @@ function show_usage
 		"      -c: chip type, e.g. 'rk3128', 'rk3399'\n" \
 		"    options\n" \
 		"      -i: images dir, e.g. './rockdev/'\n" \
+		"      -t: image type, e.g. all / uboot\n" \
 		"      -h: show this usage\n"
 }
 
@@ -153,7 +174,7 @@ function show_usage
 [ ! -f $BOOT_MERGER -o ! -f $MKIMAGE ] && \
 	echo "Tools $BOOT_MERGER or $MKIMAGE is missing!!!" && exit
 
-while getopts 'd:c:i:h' OPT; do
+while getopts 'd:c:i:t:h' OPT; do
 	case $OPT in
 	d)
 		DEVICE="$OPTARG"
@@ -163,6 +184,8 @@ while getopts 'd:c:i:h' OPT; do
 		;;
 	i)
 		IMAGES="$OPTARG"
+		;;
+	t)	TYPE=""$OPTARG""
 		;;
 	h|?)
 		show_usage
@@ -187,14 +210,19 @@ done
 #	exit
 #fi
 
+if [ $TYPE = "uboot" ]; then
+	SDBOOTIMG="$BASEDIR/../../rockdev/sd_uboot.img"
+fi
+echo $SDBOOTIMG
+
 parse_parameter $IMAGES/parameter.txt
 
 pack_idbloader "$IMAGES/Mini[Ll]oader[Aa]ll.bin" $CHIP
 
-createIMG
+createIMG $TYPE
 
-createGPT
+createGPT $TYPE
 
-downloadImages $DEVICE
+downloadImages $TYPE
 
 echo "Done!"
