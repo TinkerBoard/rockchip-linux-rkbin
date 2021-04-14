@@ -15,7 +15,8 @@ CHIP=rk3399pro
 IMAGES="$BASEDIR/../../rockdev"
 ROOTFS_IMG="$BASEDIR/../../rockdev/rootfs.img"
 
-BOOT_MERGER="$BASEDIR/../tools/boot_merger"
+BOOT_MERGER="$BASEDIR/../tools/boot_merger_old"
+echo $BOOT_MERGER
 MKIMAGE="$BASEDIR/../tools/mkimage"
 TYPE="all"
 
