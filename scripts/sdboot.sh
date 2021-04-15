@@ -113,7 +113,6 @@ function createGPT
 {
 	echo "Creating GPT..."
 	local type=$1
-	local ROOTFS=
 
 	for i in ${!LABELS[@]}; do
 		local offset=${OFFSETS[$i]}
@@ -127,11 +126,9 @@ function createGPT
 		if [ $type = "uboot" -a $label = "trust" ]; then
 			break
 		fi
-		expr match "$label" "root" > /dev/null 2>&1 && ROOTFS=$(($i + 1))
 	done
 
 	partprobe
-	sgdisk --partition-guid=${ROOTFS}:614e0000-0000-4b53-8000-1d28000054a9 ${SDBOOTIMG}
 }
 
 function downloadImages
