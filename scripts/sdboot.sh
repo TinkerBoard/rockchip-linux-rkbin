@@ -10,12 +10,13 @@
 BASEDIR="$(dirname $(realpath $0))"
 
 DEVICE=
-SDBOOTIMG="$BASEDIR/../../rockdev/sdboot.img"
+SDBOOTIMG="$BASEDIR/../../rockdev/sdcard_full.img"
 CHIP=rk3399pro
 IMAGES="$BASEDIR/../../rockdev"
 ROOTFS_IMG="$BASEDIR/../../rockdev/rootfs.img"
 
 BOOT_MERGER="$BASEDIR/../tools/boot_merger"
+echo $BOOT_MERGER
 MKIMAGE="$BASEDIR/../tools/mkimage"
 TYPE="all"
 
@@ -211,7 +212,7 @@ done
 #fi
 
 if [ $TYPE = "uboot" ]; then
-	SDBOOTIMG="$BASEDIR/../../rockdev/sd_uboot.img"
+	SDBOOTIMG="$BASEDIR/../../rockdev/sdcard_uboot.img"
 fi
 echo $SDBOOTIMG
 
