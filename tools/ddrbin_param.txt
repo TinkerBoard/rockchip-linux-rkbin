@@ -21,7 +21,7 @@ channel mask=
 stride type=
 standby_idle=
 
-ext_temp_ref_en=
+ext_temp_ref=
 link_ecc_en=
 per_bank_ref_en=
 derate_en=
@@ -50,6 +50,7 @@ optee_log_en=
 spl_log_en=
 tpl_log_en=
 
+pageclose=
 boot_fsp=
 
 ddr2_f1_freq_mhz=
