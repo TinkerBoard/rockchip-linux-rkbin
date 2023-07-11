@@ -10,8 +10,8 @@ UPDATE_IMG="$BASEDIR/../../rockdev/update.img"
 UPDATE_UBOOT_IMG="$BASEDIR/../../rockdev/update_uboot.img"
 ROOTFS_IMG="$BASEDIR/../../rockdev/rootfs.img"
 
-PROGRAM_IMAGE_TOOLS="$BASEDIR/../../tools/linux/programmer_image_tool/programmer_image_tool"
-PROGRAM_OUTPUT_IMG="$BASEDIR/../../tools/linux/programmer_image_tool/out_image.bin"
+PROGRAM_IMAGE_TOOLS="$BASEDIR/../../tools/linux/programming_image_tool/programmer_image_tool"
+PROGRAM_OUTPUT_IMG="$BASEDIR/../../tools/linux/programming_image_tool/out_image.bin"
 TYPE="all"
 
 function show_usage
